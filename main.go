@@ -1,13 +1,13 @@
 package main
 
 import (
-	"os"
 	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -63,17 +63,25 @@ func (i *stringFlags) Set(value string) error {
 	return nil
 }
 
-var nameFlags stringFlags
-
-var desc *prometheus.Desc
+var (
+	nameFlags   stringFlags
+	desc        *prometheus.Desc
+	Version     string // given at build
+	VersionLong string // given at build
+)
 
 func main() {
 	flag.Var(&nameFlags, "name", "rpm name. multiple.")
+	ver := flag.Bool("version", false, "print version")
 	flag.Parse()
+	if *ver {
+		fmt.Printf("%v\n", Version)
+		return
+	}
 
 	if len(nameFlags) == 0 {
 		log.Printf("no given names.")
-		os.Exit(1);
+		os.Exit(1)
 	}
 
 	for _, n := range nameFlags {
@@ -82,7 +90,7 @@ func main() {
 			log.Printf("%v", err)
 			os.Exit(1)
 		}
-		log.Printf("%s: %s", n, v);
+		log.Printf("%s: %s", n, v)
 	}
 
 	desc = prometheus.NewDesc("rpm_info", "Show RPM info", []string{"rpm_name", "version"}, nil)
