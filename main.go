@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"bytes"
 	"context"
 	"flag"
@@ -21,7 +22,7 @@ const (
 type myCollector struct {
 }
 
-func gv(name string) string {
+func query(name string) (string, error) {
 	b := bytes.NewBuffer([]byte{})
 	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, "/usr/bin/rpm", "-q", name)
@@ -29,9 +30,9 @@ func gv(name string) string {
 	cmd.Stdout = b
 	if err := cmd.Run(); err != nil {
 		fmt.Println(string(b.Bytes()))
-		log.Fatal(err)
+		return "", err
 	}
-	return strings.TrimSpace(strings.TrimLeft(string(b.Bytes()), name+"-"))
+	return strings.TrimSpace(strings.TrimLeft(string(b.Bytes()), name+"-")), nil
 }
 
 func (c myCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -39,8 +40,14 @@ func (c myCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c myCollector) Collect(ch chan<- prometheus.Metric) {
-	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(1), "foo", "1.2.3")
-	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(1), "bar", "0.1.2")
+	for _, n := range nameFlags {
+		v, err := query(n)
+		if err != nil {
+			log.Printf("%v", err)
+			continue
+		}
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(1), n, v)
+	}
 }
 
 var addr = flag.String("listen-address", "0.0.0.0:9872", "The address to listen on for HTTP requests.")
@@ -63,6 +70,20 @@ var desc *prometheus.Desc
 func main() {
 	flag.Var(&nameFlags, "name", "rpm name. multiple.")
 	flag.Parse()
+
+	if len(nameFlags) == 0 {
+		log.Printf("no given names.")
+		os.Exit(1);
+	}
+
+	for _, n := range nameFlags {
+		v, err := query(n)
+		if err != nil {
+			log.Printf("%v", err)
+			os.Exit(1)
+		}
+		log.Printf("%s: %s", n, v);
+	}
 
 	desc = prometheus.NewDesc("rpm_info", "Show RPM info", []string{"rpm_name", "version"}, nil)
 
