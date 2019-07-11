@@ -18,8 +18,7 @@ const (
 	namespace = "rpm"
 )
 
-type myCollector struct{
-	gauges []prometheus.Gauge
+type myCollector struct {
 }
 
 func gv(name string) string {
@@ -35,25 +34,13 @@ func gv(name string) string {
 	return strings.TrimSpace(strings.TrimLeft(string(b.Bytes()), name+"-"))
 }
 
-func newGauge(name string) prometheus.Gauge {
-	return prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace:   namespace,
-		Name:        "info",
-		Help:        "Info of " + name,
-		ConstLabels: map[string]string{"version": gv(name), "name": name},
-	})
-}
-
 func (c myCollector) Describe(ch chan<- *prometheus.Desc) {
-	for _, g := range c.gauges {
-		ch <- g.Desc()
-	}
+	ch <- desc
 }
 
 func (c myCollector) Collect(ch chan<- prometheus.Metric) {
-	for _, g := range c.gauges {
-		ch <- prometheus.MustNewConstMetric(g.Desc(), prometheus.GaugeValue, float64(1))
-	}
+	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(1), "foo", "1.2.3")
+	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(1), "bar", "0.1.2")
 }
 
 var addr = flag.String("listen-address", "0.0.0.0:9872", "The address to listen on for HTTP requests.")
@@ -71,14 +58,15 @@ func (i *stringFlags) Set(value string) error {
 
 var nameFlags stringFlags
 
+var desc *prometheus.Desc
+
 func main() {
 	flag.Var(&nameFlags, "name", "rpm name. multiple.")
 	flag.Parse()
 
-	var c myCollector
-	// c.gauges = append(c.gauges, newGauge("glibc"))
-	c.gauges = append(c.gauges, newGauge("openssl"))
+	desc = prometheus.NewDesc("rpm_info", "Show RPM info", []string{"rpm_name", "version"}, nil)
 
+	var c myCollector
 	prometheus.MustRegister(c)
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(*addr, nil))
